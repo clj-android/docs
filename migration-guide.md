@@ -28,7 +28,17 @@ release configuration.
 ## Step 1: Set Up the New Toolchain
 
 Before converting your app, install the Clojure-Android toolchain to your
-local Maven repository. From the monorepo root:
+local Maven repository. The sample project includes a task that builds and
+publishes all dependencies in the correct order:
+
+```bash
+cd sample
+./gradlew publishDepsToMavenLocal
+```
+
+This clones all dependencies into `build/deps/` (if not already present),
+then runs `publishToMavenLocal` in each one. Alternatively, build each
+component individually from its own repo:
 
 ```bash
 cd clojure-patched        && ./gradlew publishToMavenLocal
@@ -37,8 +47,6 @@ cd ../runtime-core        && ./gradlew publishToMavenLocal
 cd ../runtime-repl        && ./gradlew publishToMavenLocal
 cd ../neko                && ./gradlew publishToMavenLocal
 ```
-
-Or run `./ci.sh` which does all of the above plus builds the sample app.
 
 Requirements:
 - **JDK 17+** (JDK 22+ also works with the `--enable-native-access` flag)
@@ -229,11 +237,10 @@ myapp/
 │       ├── AndroidManifest.xml       # (not a template)
 │       ├── clojure/
 │       │   └── com/example/myapp/
-│       │       ├── main.clj          # app logic
-│       │       └── ui.clj            # UI definitions
+│       │       └── main_activity.clj # activity logic (matches MainActivity)
 │       ├── java/
 │       │   └── com/example/myapp/
-│       │       └── MainActivity.java # thin shim
+│       │       └── MainActivity.java # thin ClojureActivity shim
 │       └── res/
 │           └── values/
 │               └── strings.xml
@@ -309,120 +316,93 @@ system uses thin Java classes that call into Clojure.
                    :on-click (fn [_] (toast "Hello!" :short))}]]))))
 ```
 
-### New: Java shim + Clojure namespace
+### New: ClojureActivity shim + Clojure namespace
 
 **Java shim** (`app/src/main/java/com/example/myapp/MainActivity.java`):
 
 ```java
 package com.example.myapp;
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.util.Log;
-import android.view.View;
+import com.goodanser.clj_android.runtime.ClojureActivity;
 
-public class MainActivity extends Activity {
-    private static final String TAG = "MainActivity";
-    private static MainActivity currentInstance;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        currentInstance = this;
-
-        try {
-            // Load the Clojure namespace
-            Object require = clojure.java.api.Clojure.var("clojure.core", "require");
-            ((clojure.lang.IFn) require).invoke(
-                clojure.java.api.Clojure.read("com.example.myapp.ui"));
-
-            // Call the Clojure function to build the UI
-            Object makeUi = clojure.java.api.Clojure.var(
-                "com.example.myapp.ui", "make-ui");
-            View view = (View) ((clojure.lang.IFn) makeUi).invoke(this);
-            setContentView(view);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load Clojure UI", e);
-        }
-    }
-
-    /** Called from Clojure REPL to hot-reload the UI. */
-    public static void reloadUi() {
-        final MainActivity activity = currentInstance;
-        if (activity == null) return;
-        activity.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    clojure.lang.IFn makeUi = (clojure.lang.IFn)
-                        clojure.java.api.Clojure.var(
-                            "com.example.myapp.ui", "make-ui");
-                    View view = (View) makeUi.invoke(activity);
-                    activity.setContentView(view);
-                } catch (Exception e) {
-                    Log.e(TAG, "Failed to reload UI", e);
-                }
-            }
-        });
-    }
+/**
+ * ClojureActivity maps this class to the Clojure namespace
+ * com.example.myapp.main-activity (CamelCase → kebab-case by convention).
+ */
+public class MainActivity extends ClojureActivity {
+    // All behavior is defined in the Clojure namespace
+    // com.example.myapp.main-activity
 }
 ```
 
-**Clojure UI namespace** (`app/src/main/clojure/com/example/myapp/ui.clj`):
+`ClojureActivity` (from `runtime-core`) automatically:
+- Derives a Clojure namespace from the class name (`MainActivity` →
+  `main-activity`)
+- Requires the namespace on `onCreate`
+- Delegates lifecycle methods (`on-create`, `on-resume`, etc.) to functions
+  in that namespace
+- Provides `reloadUi()` which calls `make-ui` on the UI thread
+- Tracks instances for REPL access via `ClojureActivity.getInstance(ns)`
+
+Override `getClojureNamespace()` in the Java class to use a custom namespace
+instead of the convention-based one.
+
+**Clojure namespace** (`app/src/main/clojure/com/example/myapp/main_activity.clj`):
 
 ```clojure
-(ns com.example.myapp.ui
+(ns com.example.myapp.main-activity
   (:require [neko.ui :as ui]
             [neko.find-view :refer [find-view]]
             [neko.log :as log])
-  (:import android.app.Activity))
-
-(defonce *activity (atom nil))
-(defonce *root-view (atom nil))
+  (:import android.app.Activity
+           com.goodanser.clj_android.runtime.ClojureActivity))
 
 (defn make-ui
-  "Builds the UI tree. Called from Java shim and from reload-ui!."
+  "Builds the UI tree. Called by on-create and ClojureActivity.reloadUi()."
   [^Activity activity]
-  (reset! *activity activity)
-  (let [root (ui/make-ui activity
-               [:linear-layout {:id-holder true
-                                :orientation :vertical
-                                :padding [32 32 32 32]}
-                [:text-view {:text "Hello from Clojure!"
-                             :text-size [24 :sp]}]
-                [:button {:text "Press me"
-                          :on-click (fn [_] (log/i "Button clicked"))}]])]
-    (reset! *root-view root)
-    root))
+  (ui/make-ui activity
+    [:linear-layout {:id-holder true
+                     :orientation :vertical
+                     :padding [32 32 32 32]}
+     [:text-view {:text "Hello from Clojure!"
+                  :text-size [24 :sp]}]
+     [:button {:text "Press me"
+               :on-click (fn [_] (log/i "Button clicked"))}]]))
+
+(defn on-create
+  "Called automatically by ClojureActivity when the activity is created."
+  [^Activity activity saved-instance-state]
+  (.setContentView activity (make-ui activity)))
 
 (defn reload-ui!
   "Hot-reload the UI from the REPL."
   []
-  (-> (Class/forName "com.example.myapp.MainActivity")
-      (.getMethod "reloadUi" (into-array Class []))
-      (.invoke nil (into-array Object []))))
+  (when-let [activity (ClojureActivity/getInstance
+                        "com.example.myapp.main-activity")]
+    (.reloadUi ^ClojureActivity activity)))
 ```
 
 ### Conversion pattern
 
 For each `defactivity` in your old code:
 
-1. Create a Java file with the same class name referenced in your manifest
-2. In `onCreate`, use `clojure.java.api.Clojure.var()` to require the
-   namespace and invoke a `make-ui` function
-3. Move all UI construction logic to a Clojure namespace's `make-ui` function
-4. Add a `reloadUi()` static method in Java for REPL hot-reload
-5. Add a `reload-ui!` function in Clojure that calls the Java method
+1. Create a Java file extending `ClojureActivity` with the same class name
+   referenced in your manifest — the Java class body can be empty
+2. Create a Clojure namespace matching the convention
+   (`MyActivity` → `my-activity` in the same package)
+3. Define `(on-create [activity bundle])` for initialization and
+   `(make-ui [activity])` for REPL-driven hot-reload
+4. Other lifecycle functions (`on-resume`, `on-pause`, etc.) are optional
 
 ### Multiple activities
 
 Repeat the pattern for each activity. Each gets its own Java shim and
-Clojure namespace:
+Clojure namespace, matched by naming convention:
 
 ```
-java/com/example/myapp/MainActivity.java    → clojure/.../main_ui.clj
-java/com/example/myapp/SettingsActivity.java → clojure/.../settings_ui.clj
-java/com/example/myapp/DetailActivity.java   → clojure/.../detail_ui.clj
+java/.../MainActivity.java     → clojure/.../main_activity.clj
+java/.../SettingsActivity.java → clojure/.../settings_activity.clj
+java/.../DetailActivity.java   → clojure/.../detail_activity.clj
 ```
 
 ---
@@ -600,8 +580,8 @@ Key differences:
 (System/getProperty "java.vm.name") ;;=> "Dalvik"
 
 ;; Reload UI after making changes
-(require '[com.example.myapp.ui :as ui])
-(ui/reload-ui!)
+(require '[com.example.myapp.main-activity :as ma])
+(ma/reload-ui!)
 ```
 
 ---

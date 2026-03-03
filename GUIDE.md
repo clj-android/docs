@@ -13,16 +13,19 @@ structure through live REPL development to store-ready release builds.
   any nREPL client)
 
 Install the Clojure-Android toolchain to your local Maven repository before
-creating an app. From the monorepo root:
+creating an app. The sample project includes a task that builds and publishes
+all dependencies in the correct order:
 
 ```bash
-# Build and install all components to ~/.m2
-cd clojure-patched && gradle publishToMavenLocal
-cd ../runtime-core && gradle publishToMavenLocal
-cd ../runtime-repl && gradle publishToMavenLocal
-cd ../neko && gradle publishToMavenLocal      # or: lein install
-cd ../android-clojure-plugin && gradle publishToMavenLocal
+cd sample
+./gradlew publishDepsToMavenLocal
 ```
+
+This clones all dependencies into `build/deps/` (if not already present),
+then runs `clean publishToMavenLocal` in each one. The sample app's
+`settings.gradle.kts` also auto-clones these dependencies on any build, so
+you can skip this step and build the sample directly — dependencies are
+fetched and built from source automatically.
 
 ---
 
@@ -44,8 +47,7 @@ my-app/
 │       ├── AndroidManifest.xml
 │       ├── clojure/             # Clojure sources (AOT-compiled)
 │       │   └── com/myapp/
-│       │       ├── main.clj     # Entry point namespace
-│       │       └── ui.clj       # UI definitions
+│       │       └── main_activity.clj  # Activity logic (matches MainActivity)
 │       ├── java/                # Java sources (optional)
 │       │   └── com/myapp/
 │       │       └── MainActivity.java
@@ -87,7 +89,7 @@ include(":app")
 ```kotlin
 plugins {
     id("com.android.application") version "8.9.0" apply false
-    id("org.clojure-android.android-clojure") version "0.5.0-SNAPSHOT" apply false
+    id("com.goodanser.clj-android.android-clojure") version "0.5.0-SNAPSHOT" apply false
 }
 ```
 
@@ -96,7 +98,7 @@ plugins {
 ```kotlin
 plugins {
     id("com.android.application")
-    id("org.clojure-android.android-clojure")
+    id("com.goodanser.clj-android.android-clojure")
 }
 
 android {
@@ -136,13 +138,23 @@ android {
 
 clojureOptions {
     warnOnReflection.set(true)
-    // replEnabled is true for debug builds, false for release, by default
-    // nreplPort defaults to 7888
+
+    // replEnabled: include nREPL server. Default: true for debug, false for release.
+    // Set to true in release builds if you want REPL access in production.
+    // replEnabled.set(true)
+
+    // dynamicCompilationEnabled: include AndroidDynamicClassLoader and dx.
+    // Automatically enabled when replEnabled is true. Set independently if
+    // your app needs to eval Clojure at runtime without nREPL.
+    // dynamicCompilationEnabled.set(true)
+
+    // nreplPort: device-side nREPL port. Default: 7888.
+    // nreplPort.set(9999)
 }
 
 dependencies {
     implementation("org.clojure:clojure:1.12.0")
-    implementation("org.clojure-android:neko:5.0.0-SNAPSHOT")
+    implementation("com.goodanser.clj-android:neko:5.0.0-SNAPSHOT")
 }
 ```
 
@@ -155,7 +167,7 @@ dependencies {
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:name="org.clojure_android.runtime.ClojureApp"
+        android:name="com.goodanser.clj_android.runtime.ClojureApp"
         android:label="@string/app_name"
         android:supportsRtl="true">
 
@@ -172,7 +184,7 @@ dependencies {
 ```
 
 Key points:
-- **`android:name="org.clojure_android.runtime.ClojureApp"`** — This
+- **`android:name="com.goodanser.clj_android.runtime.ClojureApp"`** — This
   Application subclass initializes the Clojure runtime before any Activity
   starts. You can subclass it if you need custom Application logic.
 - **`INTERNET` permission** — Required for nREPL to accept connections via
@@ -181,61 +193,56 @@ Key points:
 
 ### Writing activities
 
-Activities are written in Java (or Kotlin) and call into Clojure via
-`clojure.java.api.Clojure`. This is the thinnest possible Java layer — all
-logic lives in Clojure:
+Activities extend `ClojureActivity` from `runtime-core`. This base class
+automatically requires a Clojure namespace derived from the class name and
+delegates lifecycle methods to functions in that namespace. The Java class
+is just a thin shim — all logic lives in Clojure:
 
 ```java
 // app/src/main/java/com/myapp/MainActivity.java
 package com.myapp;
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.view.View;
+import com.goodanser.clj_android.runtime.ClojureActivity;
 
-public class MainActivity extends Activity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        // Load the Clojure namespace
-        Object require = clojure.java.api.Clojure.var("clojure.core", "require");
-        ((clojure.lang.IFn) require).invoke(
-            clojure.java.api.Clojure.read("com.myapp.ui"));
-
-        // Call a Clojure function to build the UI
-        Object makeUi = clojure.java.api.Clojure.var("com.myapp.ui", "make-ui");
-        View view = (View) ((clojure.lang.IFn) makeUi).invoke(this);
-        setContentView(view);
-    }
+/**
+ * ClojureActivity maps this class to the Clojure namespace
+ * com.myapp.main-activity (CamelCase → kebab-case by convention).
+ */
+public class MainActivity extends ClojureActivity {
+    // All behavior is defined in the Clojure namespace
+    // com.myapp.main-activity
 }
 ```
 
+`ClojureActivity` converts the class name to a namespace using this
+convention: `com.myapp.MainActivity` becomes `com.myapp.main-activity`.
+Override `getClojureNamespace()` in the Java class to use a custom namespace
+instead.
+
 ### Writing Clojure UI code
 
-The neko library provides a declarative DSL where UI layouts are Clojure
-data structures:
+The Clojure namespace corresponding to an activity defines lifecycle
+functions that `ClojureActivity` calls automatically. The neko library
+provides a declarative DSL where UI layouts are Clojure data structures:
 
 ```clojure
-;; app/src/main/clojure/com/myapp/ui.clj
-(ns com.myapp.ui
+;; app/src/main/clojure/com/myapp/main_activity.clj
+(ns com.myapp.main-activity
   (:require [neko.ui :as ui]
+            [neko.find-view :refer [find-view]]
             [neko.log :as log])
   (:import android.app.Activity
-           android.os.Handler
-           android.os.Looper))
+           com.goodanser.clj_android.runtime.ClojureActivity))
 
 (def ^:private counter (atom 0))
 
-(defn- run-on-ui [^Activity activity f]
-  (.post (Handler. (Looper/getMainLooper))
-         (reify Runnable (run [_] (f)))))
-
 (defn make-ui
-  "Builds the UI tree using neko's declarative DSL."
+  "Builds the UI tree using neko's declarative DSL.
+  Called by on-create and by ClojureActivity.reloadUi()."
   [^Activity activity]
   (ui/make-ui activity
-    [:linear-layout {:orientation :vertical
+    [:linear-layout {:id-holder true
+                     :orientation :vertical
                      :padding [32 32 32 32]}
      [:text-view {:text "Hello from Clojure!"
                   :text-size [24 :sp]}]
@@ -244,24 +251,41 @@ data structures:
                            (let [n (swap! counter inc)]
                              (log/i "Button clicked:" n)))}]]))
 
+(defn on-create
+  "Called automatically by ClojureActivity when the activity is created."
+  [^Activity activity saved-instance-state]
+  (.setContentView activity (make-ui activity)))
+
 (defn reload-ui!
   "Hot-reload the UI from the REPL."
-  [^Activity activity]
-  (run-on-ui activity
-    #(.setContentView activity (make-ui activity))))
+  []
+  (when-let [activity (ClojureActivity/getInstance
+                        "com.myapp.main-activity")]
+    (.reloadUi ^ClojureActivity activity)))
 ```
+
+The Clojure namespace may define any of these functions (all optional):
+
+- `(on-create [activity bundle])` — called from `onCreate`
+- `(on-start [activity])`, `(on-resume [activity])`, `(on-pause [activity])`,
+  `(on-stop [activity])`, `(on-destroy [activity])`
+- `(on-save-instance-state [activity bundle])`,
+  `(on-restore-instance-state [activity bundle])`
+- `(make-ui [activity])` — returns a `View`; used by `reloadUi()` and as a
+  fallback if `on-create` is absent
 
 ### What the Gradle plugin does automatically
 
-When you apply `org.clojure-android.android-clojure`, the plugin:
+When you apply `com.goodanser.clj-android.android-clojure`, the plugin:
 
 1. Registers `src/{sourceSet}/clojure/` as source directories
 2. Creates a `compile{Variant}Clojure` task that AOT-compiles all `.clj`
    files to JVM `.class` files
 3. Wires the compiled classes into Android's dex pipeline
-4. Adds `runtime-core` (always) and `runtime-repl` (debug builds only)
-5. In debug builds, substitutes stock Clojure with a patched version that
-   delegates to `AndroidDynamicClassLoader` for REPL support
+4. Adds `runtime-core` (all builds) and `runtime-repl` (debug builds by
+   default — see `clojureOptions` below)
+5. In debug builds (by default), substitutes stock Clojure with a patched
+   version that delegates to `AndroidDynamicClassLoader` for REPL support
 
 ---
 
@@ -284,14 +308,29 @@ edit Clojure code, send it to the device, and see changes immediately.
                                                        └────────────────┘
 ```
 
-In debug builds, the app includes:
+In debug builds (by default), the app includes:
 - An **nREPL server** listening on port 7888 (configurable) on the device
 - **AndroidDynamicClassLoader** — translates JVM bytecode emitted by the
   Clojure compiler into DEX format on-the-fly using the dx library, then
   loads it via `InMemoryDexClassLoader`
 - The **dx library** (from AOSP) for JVM-to-DEX bytecode translation
 
-None of these components are included in release builds.
+By default, none of these components are included in release builds.
+However, you can opt in to dynamic compilation and/or nREPL in release
+builds via `clojureOptions`:
+
+```kotlin
+clojureOptions {
+    // Include nREPL + dynamic compilation in release builds
+    replEnabled.set(true)
+
+    // Or include only dynamic compilation (no nREPL)
+    dynamicCompilationEnabled.set(true)
+}
+```
+
+This is useful for apps that evaluate user-provided Clojure expressions
+at runtime, or for field-testing with REPL access.
 
 ### Step-by-step setup
 
@@ -376,16 +415,17 @@ Once connected, you can evaluate Clojure code that runs on the device:
 (System/getProperty "java.vm.name")
 ;;=> "Dalvik"
 
-;; Require your UI namespace
-(require '[com.myapp.ui :as ui])
+;; Require your activity's namespace
+(require '[com.myapp.main-activity :as ma])
 
 ;; Modify the UI function, then hot-reload
-(ui/reload-ui! activity)
+(ma/reload-ui!)
 ```
 
-The `reload-ui!` pattern works by calling `setContentView` with a freshly
-constructed view tree. Because the Clojure code is evaluated dynamically
-(compiled to DEX on-device), changes take effect immediately.
+The `reload-ui!` pattern calls `ClojureActivity.reloadUi()`, which invokes
+`make-ui` on the UI thread and sets the result as the content view. Because
+the Clojure code is evaluated dynamically (compiled to DEX on-device),
+changes take effect immediately.
 
 ### Tips for REPL development
 
@@ -421,8 +461,9 @@ The Clojure-Android Gradle plugin is designed to be F-Droid compatible:
   F-Droid's build environment
 - **Deterministic output** — AOT compilation is deterministic; the same
   sources produce the same `.class` files
-- **No REPL in release** — The plugin automatically excludes nREPL, dx,
-  and the dynamic classloader from release builds
+- **No REPL in release (by default)** — The plugin excludes nREPL, dx,
+  and the dynamic classloader from release builds unless overridden via
+  `clojureOptions`
 
 ### F-Droid metadata
 
@@ -464,28 +505,20 @@ Publish `android-clojure-plugin`, `runtime-core`, `runtime-repl`, and
 `neko` to Maven Central or a public repository. Then F-Droid's build can
 fetch them like any other dependency.
 
-**Option B: Include as submodules or composite builds**
+**Option B: Include as composite builds (recommended)**
 
-Use Gradle composite builds to include the plugin and runtime as source
-dependencies:
+The sample project's `settings.gradle.kts` already does this: it auto-clones
+all dependencies into `build/deps/` and includes them as Gradle composite
+builds. Everything builds from source with no external binary dependencies.
 
-```kotlin
-// settings.gradle.kts
-pluginManagement {
-    includeBuild("../android-clojure-plugin")  // Build from source
-}
+For F-Droid, add a prebuild step that publishes to Maven local:
 
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://clojars.org/repo") }
-    }
-}
+```bash
+./gradlew publishDepsToMavenLocal
 ```
 
-This is the most F-Droid-friendly approach because everything builds from
-source with no external binary dependencies.
+This is the most F-Droid-friendly approach because all source is fetched
+and built deterministically.
 
 **Option C: Vendor JARs**
 
@@ -509,10 +542,8 @@ android {
     }
 }
 
-// Ensure REPL is excluded from release
-clojureOptions {
-    // replEnabled defaults to false for release — no action needed
-}
+// REPL is excluded from release by default — no action needed.
+// To opt in: clojureOptions { replEnabled.set(true) }
 ```
 
 ### ProGuard/R8 rules for Clojure
@@ -624,10 +655,12 @@ Output: `app/build/outputs/bundle/release/app-release.aab`
 2. **64-bit support**: Clojure runs on the JVM/ART so there are no
    native library concerns unless you add NDK dependencies.
 
-3. **No dynamic code loading in release**: The Clojure-Android plugin
-   automatically excludes `runtime-repl` (which contains dx and nREPL)
-   from release builds. Release APKs contain only AOT-compiled code.
-   This satisfies Play Store policies against downloading executable code.
+3. **No dynamic code loading in release (by default)**: The Clojure-Android
+   plugin excludes `runtime-repl` (which contains dx and nREPL) from release
+   builds by default. Release APKs contain only AOT-compiled code, satisfying
+   Play Store policies against downloading executable code. If you opt in
+   to `replEnabled` or `dynamicCompilationEnabled` for release, ensure your
+   use case complies with Play Store policies.
 
 4. **Permissions**: Remove `INTERNET` permission if your app doesn't need
    network access in production. The REPL needs it, but it's not included

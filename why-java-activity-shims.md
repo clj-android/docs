@@ -4,7 +4,7 @@
 
 **Before:** `defactivity` (in `neko/src/clojure/neko/activity.clj`) used Clojure's `gen-class` to emit an entire Activity subclass as AOT-compiled bytecode — no Java needed.
 
-**After:** Activities are thin Java classes that bootstrap Clojure via `clojure.java.api.Clojure.var()` and delegate all logic to Clojure functions. The sample app's `NekoActivity.java` shows the pattern: `require` a namespace, then `invoke` a function, passing `this`.
+**After:** Activities are thin Java classes that extend `ClojureActivity` from `runtime-core`. `ClojureActivity` automatically requires a Clojure namespace derived from the class name (e.g. `MainActivity` → `main-activity`) and delegates lifecycle methods to functions in that namespace. The Java shim can be an empty class — all logic lives in Clojure.
 
 ## Why the change was made
 
