@@ -10,7 +10,7 @@ Add a line to the `dependencies` block in `app/build.gradle.kts`:
 ```kotlin
 dependencies {
     implementation("org.clojure:clojure:1.12.0")
-    implementation("org.clojure-android:neko:5.0.0-SNAPSHOT")
+    implementation("com.goodanser.clj-android:neko:5.0.0-SNAPSHOT")
 
     // Add libraries exactly like you would in deps.edn — group:artifact:version
     implementation("hiccup:hiccup:2.0.0-RC3")
@@ -117,7 +117,7 @@ Gradle checks for updates according to its caching policy (default: 24h,
 override with `--refresh-dependencies`):
 
 ```kotlin
-implementation("org.clojure-android:neko:5.0.0-SNAPSHOT")
+implementation("com.goodanser.clj-android:neko:5.0.0-SNAPSHOT")
 ```
 
 **Library built locally** — publish it to your local Maven repository, then

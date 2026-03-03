@@ -10,14 +10,14 @@ release configuration.
 | Aspect | Old | New |
 |--------|-----|-----|
 | Build tool | Leiningen + lein-droid 0.4.6 | Gradle 8.7+ / AGP 8.9+ |
-| Clojure | `org.clojure-android/clojure` 1.7.0 fork | Stock `org.clojure:clojure` 1.12.0 |
-| neko | `neko/neko` 4.0.0-alpha5 | `org.clojure-android:neko` 5.0.0-SNAPSHOT |
+| Clojure | `com.goodanser.clj-android/clojure` 1.7.0 fork | Stock `org.clojure:clojure` 1.12.0 |
+| neko | `neko/neko` 4.0.0-alpha5 | `com.goodanser.clj-android:neko` 5.0.0-SNAPSHOT |
 | nREPL | `org.clojure/tools.nrepl` 0.2.10 | `nrepl:nrepl` 1.0.0 (auto-included) |
 | Min Android | ~API 14 (Ice Cream Sandwich) | API 26 (Oreo 8.0) |
 | Target Android | API 18 (Jelly Bean) | API 35 |
 | Java level | 1.6 | 1.8 |
 | Activity pattern | `defactivity` macro (gen-class) | Thin Java shims + Clojure functions |
-| Application class | `neko.App` | `org.clojure_android.runtime.ClojureApp` |
+| Application class | `neko.App` | `com.goodanser.clj_android.runtime.ClojureApp` |
 | Dexing | SDK `dx` binary (manual) | D8 (handled by AGP) |
 | Shrinking | ProGuard (manual) | R8 (handled by AGP) |
 | MultiDex | Explicit `com.android.support/multidex` | Native (API 21+) |
@@ -60,7 +60,7 @@ files at the project root plus one per module.
   :java-source-paths ["src/java"]
   :javac-options ["-target" "1.6" "-source" "1.6"]
   :plugins [[lein-droid "0.4.6"]]
-  :dependencies [[org.clojure-android/clojure "1.7.0-RC1" :use-resources true]
+  :dependencies [[com.goodanser.clj-android/clojure "1.7.0-RC1" :use-resources true]
                  [neko/neko "4.0.0-alpha5"]]
   :profiles {:dev
              {:dependencies [[org.clojure/tools.nrepl "0.2.10"]]
@@ -107,7 +107,7 @@ include(":app")
 ```kotlin
 plugins {
     id("com.android.application") version "8.9.0" apply false
-    id("org.clojure-android.android-clojure") version "0.5.0-SNAPSHOT" apply false
+    id("com.goodanser.clj-android.android-clojure") version "0.5.0-SNAPSHOT" apply false
 }
 ```
 
@@ -116,7 +116,7 @@ plugins {
 ```kotlin
 plugins {
     id("com.android.application")
-    id("org.clojure-android.android-clojure")
+    id("com.goodanser.clj-android.android-clojure")
 }
 
 android {
@@ -155,7 +155,7 @@ clojureOptions {
 
 dependencies {
     implementation("org.clojure:clojure:1.12.0")
-    implementation("org.clojure-android:neko:5.0.0-SNAPSHOT")
+    implementation("com.goodanser.clj-android:neko:5.0.0-SNAPSHOT")
 }
 ```
 
@@ -185,7 +185,7 @@ because the Gradle plugin and AGP handle them automatically:
 
 ### What the plugin handles automatically
 
-When you apply `org.clojure-android.android-clojure`, the plugin:
+When you apply `com.goodanser.clj-android.android-clojure`, the plugin:
 
 1. Registers `src/{sourceSet}/clojure/` as source directories
 2. Creates `compile{Variant}Clojure` tasks that AOT-compile `.clj` to `.class`
@@ -461,7 +461,7 @@ java/com/example/myapp/DetailActivity.java   → clojure/.../detail_ui.clj
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:name="org.clojure_android.runtime.ClojureApp"
+        android:name="com.goodanser.clj_android.runtime.ClojureApp"
         android:label="@string/app_name"
         android:supportsRtl="true">
 
@@ -480,7 +480,7 @@ java/com/example/myapp/DetailActivity.java   → clojure/.../detail_ui.clj
 Key changes:
 - **No Clostache templates** -- `package`, `versionCode`, `versionName`,
   `minSdkVersion`, `targetSdkVersion` are all set in `build.gradle.kts`
-- **Application class**: `neko.App` → `org.clojure_android.runtime.ClojureApp`
+- **Application class**: `neko.App` → `com.goodanser.clj_android.runtime.ClojureApp`
 - **Activity names**: Reference your Java shim classes, not gen-class output
 - **`android:exported="true"`**: Required since API 31 for activities with
   intent filters
@@ -741,14 +741,14 @@ local.properties
 
 | Old (project.clj) | New (build.gradle.kts) |
 |-------------------|----------------------|
-| `[org.clojure-android/clojure "1.7.0-RC1"]` | `implementation("org.clojure:clojure:1.12.0")` |
-| `[neko/neko "4.0.0-alpha5"]` | `implementation("org.clojure-android:neko:5.0.0-SNAPSHOT")` |
+| `[com.goodanser.clj-android/clojure "1.7.0-RC1"]` | `implementation("org.clojure:clojure:1.12.0")` |
+| `[neko/neko "4.0.0-alpha5"]` | `implementation("com.goodanser.clj-android:neko:5.0.0-SNAPSHOT")` |
 | `[org.clojure/tools.nrepl "0.2.10"]` (dev) | Automatic (runtime-repl includes nrepl 1.0.0) |
 | `[com.android.support/multidex "1.0.0"]` | Not needed (native on minSdk 26) |
 
 Note: You declare `org.clojure:clojure:1.12.0` (stock Clojure) in your
 dependencies. The Gradle plugin automatically substitutes the patched
-version (`org.clojure-android:clojure:1.12.0-1`) in debug builds for REPL
+version (`com.goodanser.clj-android:clojure:1.12.0-1`) in debug builds for REPL
 support. Release builds use stock Clojure with no modifications.
 
 ---
@@ -764,7 +764,7 @@ substitution automatically in debug builds; for release, stock Clojure
 invoked.
 
 **nREPL not starting**
-Check that `android:name="org.clojure_android.runtime.ClojureApp"` is set
+Check that `android:name="com.goodanser.clj_android.runtime.ClojureApp"` is set
 in your manifest's `<application>` tag. Check logcat:
 `adb logcat -s ClojureApp`.
 
