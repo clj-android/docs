@@ -75,16 +75,16 @@ These are arguably **more impactful** than new widgets -- they make the current 
 | 5 | `:input-type` | :edit-text | Keyboard type (number, email, password) |
 | 6 | `:text-color` | :text-view | Text color -- surprisingly missing |
 | 7 | `:gravity` | :text-view | Text alignment within widget |
-| 8 | `:max-lines` / `:single-line` | :text-view | Line count control |
+| 8 | `:max-lines` / `:single-line` | :text-view | Line count control | **DONE** |
 | 9 | `:checked` | :check-box (and CompoundButton subclasses) | Set initial checked state |
 | 10 | `:on-checked-change` | :check-box | React to checkbox toggle -- currently missing |
 | 11 | `:on-item-long-click` | :list-view, :grid-view | Long-press on list items (listener exists, unwired) |
 | 12 | `:on-item-selected` | :spinner (new), :list-view | Selection change (listener exists, unwired) |
 | 13 | `:progress` / `:max` | :progress-bar | Set progress value -- currently ProgressBar is a no-op |
 | 14 | `:content-description` | :view | Accessibility -- important for production apps |
-| 15 | `:alpha` | :view (API 11+) | Transparency |
-| 16 | `:min-height` / `:min-width` | :view | Minimum dimensions |
-| 17 | `:on-scroll` | :list-view | Scroll event listener |
+| 15 | `:alpha` | :view (API 11+) | Transparency | **DONE** |
+| 16 | `:min-height` / `:min-width` | :view | Minimum dimensions | **DONE** |
+| 17 | `:on-scroll` | :list-view | Scroll event listener | **DONE** |
 
 ## Tier 3: Support library widgets (require new dependencies)
 
