@@ -15,7 +15,7 @@ release configuration.
 | nREPL | `org.clojure/tools.nrepl` 0.2.10 | `nrepl:nrepl` 1.0.0 (auto-included) |
 | Min Android | ~API 14 (Ice Cream Sandwich) | API 26 (Oreo 8.0) |
 | Target Android | API 18 (Jelly Bean) | API 35 |
-| Java level | 1.6 | 1.8 |
+| Java level | 1.6 | 11 |
 | Activity pattern | `defactivity` macro (gen-class) | Thin Java shims + Clojure functions |
 | Application class | `neko.App` | `com.goodanser.clj_android.runtime.ClojureApp` |
 | Dexing | SDK `dx` binary (manual) | D8 (handled by AGP) |
@@ -146,8 +146,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     packaging {
