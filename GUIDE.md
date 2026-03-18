@@ -715,6 +715,58 @@ echo "Build OK: debug has REPL, release is clean"
 
 ---
 
+## 5. Troubleshooting
+
+### `NoClassDefFoundError` during AOT compilation
+
+If `./gradlew assembleDebug` fails with an error like:
+
+```
+java.lang.NoClassDefFoundError: com/example/SomeClass
+	at java.base/java.lang.Class.getDeclaredConstructors0(Native Method)
+	...
+> Task :app:compileDebugClojure FAILED
+```
+
+This typically means a **transitive dependency** is missing from the compile
+classpath. The Clojure AOT compiler resolves classes eagerly — if your code
+(or a library you depend on) references a class whose transitive dependency
+is declared as runtime-only in its POM, the compiler will fail even though
+the class would be available at runtime on the device.
+
+**Example:** `androidplot-core` depends on `com.halfhp.fig:figlib`, but
+declares it as a runtime-only dependency. During AOT compilation, the
+Clojure compiler encounters androidplot classes that reference
+`FigException` and fails with `NoClassDefFoundError:
+com/halfhp/fig/FigException`.
+
+**Fix:** Add the missing transitive dependency as an explicit
+`implementation` dependency in your `app/build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("com.androidplot:androidplot-core:1.5.11")
+    implementation("com.halfhp.fig:figlib:1.0.11")  // required at compile time by androidplot
+}
+```
+
+**Diagnosing:** To find which dependency pulls in the missing class, run:
+
+```bash
+./gradlew app:dependencies --configuration debugRuntimeClasspath | grep <library-name>
+```
+
+Compare with the compile classpath to confirm it's missing there:
+
+```bash
+./gradlew app:dependencies --configuration debugCompileClasspath | grep <library-name>
+```
+
+If the library appears in the runtime classpath but not the compile
+classpath, add it as an explicit `implementation` dependency.
+
+---
+
 ## Quick Reference
 
 | Task | Command |
