@@ -150,6 +150,11 @@ clojureOptions {
 
     // nreplPort: device-side nREPL port. Default: 7888.
     // nreplPort.set(9999)
+
+    // sourceResourceExcludes: strip specific .clj files from the APK/AAR.
+    // Use this for proprietary code that should be AOT-compiled but not
+    // distributed as source. Patterns match resource paths in the archive.
+    // sourceResourceExcludes.set(listOf("com/myapp/internal/**"))
 }
 
 dependencies {
@@ -286,6 +291,9 @@ When you apply `com.goodanser.clj-android.android-clojure`, the plugin:
    default — see `clojureOptions` below)
 5. In debug builds (by default), substitutes stock Clojure with a patched
    version that delegates to `AndroidDynamicClassLoader` for REPL support
+6. Bundles `.clj` source files as resources only in builds with dynamic
+   compilation enabled (debug by default). Release builds contain only
+   AOT-compiled classes — no source files in the APK
 
 ---
 
@@ -689,10 +697,11 @@ Output: `app/build/outputs/bundle/release/app-release.aab`
 # Or build release APK
 ./gradlew :app:assembleRelease
 
-# Verify the release APK has no REPL components
-# (should return empty — no matches)
+# Verify the release APK has no REPL components or .clj source files
+# (all should return empty — no matches)
 zipinfo app/build/outputs/apk/release/app-release.apk | grep -i nrepl
 zipinfo app/build/outputs/apk/release/app-release.apk | grep -i "AndroidDynamicClassLoader"
+zipinfo app/build/outputs/apk/release/app-release.apk | grep '\.clj$'
 ```
 
 ### CI pipeline example
@@ -707,6 +716,11 @@ set -euo pipefail
 # Verify release APK excludes REPL infrastructure
 if zipinfo app/build/outputs/apk/release/app-release.apk | grep -q nrepl; then
     echo "ERROR: nREPL found in release APK"
+    exit 1
+fi
+
+if zipinfo app/build/outputs/apk/release/app-release.apk | grep -q '\.clj$'; then
+    echo "ERROR: .clj source files found in release APK"
     exit 1
 fi
 

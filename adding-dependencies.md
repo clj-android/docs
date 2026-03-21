@@ -88,6 +88,18 @@ classpath and compiles it on first load.  In debug builds this happens via
 `AndroidDynamicClassLoader`; in release builds, transitive requires
 triggered during your app's AOT compilation are compiled ahead of time too.
 
+**Source stripping in release builds**: When dynamic compilation is disabled
+(release builds by default), the plugin excludes all `.clj` source files
+from the APK — only AOT-compiled classes are shipped.  This reduces APK
+size and avoids distributing source code.  To exclude specific sources from
+all builds (including debug), use `sourceResourceExcludes`:
+
+```kotlin
+clojureOptions {
+    sourceResourceExcludes.set(listOf("com/myapp/internal/**"))
+}
+```
+
 ## Scope keywords (implementation vs compileOnly)
 
 | Gradle scope | project.clj equivalent | Use when |
