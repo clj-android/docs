@@ -49,6 +49,33 @@ from memory). F-Droid's scanner flags the substring "DexClassLoader" within
 that class name. The class is only included in debug builds via the
 `runtime-repl` dependency and is not present in release APKs.
 
+## Signing
+
+Use `apksigner` from build-tools **34.x**, not 35.0.0+. The newer
+`apksigner` produces signature padding that `apksigcopier` (used by
+F-Droid to verify reproducible builds) cannot transplant correctly,
+causing verification failure even when the unsigned APKs are
+byte-identical.
+
+```bash
+~/Android/Sdk/build-tools/34.0.0/apksigner sign \
+  -ks your-keystore.jks --ks-key-alias your-alias \
+  app/build/outputs/apk/release/your-app.apk
+```
+
+## Baseline Profile
+
+Disable ART profile generation — it is non-deterministic across build
+environments. In `app/build.gradle.kts`:
+
+```kotlin
+tasks.whenTaskAdded {
+    if (name.contains("ArtProfile")) {
+        enabled = false
+    }
+}
+```
+
 ## Gradle Wrapper JARs
 
 F-Droid automatically removes `gradle-wrapper.jar` files from cloned
