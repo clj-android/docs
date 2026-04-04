@@ -7,6 +7,7 @@ Documentation for the [Clojure-Android](https://github.com/clj-android) toolchai
 | Document | Description |
 |---|---|
 | [Developer Guide](GUIDE.md) | Complete guide: project structure, Gradle config, nREPL workflow, F-Droid and Play Store builds |
+| [API 24 Release Builds](api-24-release.md) | *Experimental.* Dropping `minSdk` to 24 for release builds without the REPL |
 | [Adding Dependencies](adding-dependencies.md) | Quick-start for Clojure developers: translating project.clj / deps.edn to Gradle, auto-fetch, Android gotchas |
 | [Migration Guide](migration-guide.md) | Step-by-step migration from lein-droid to the modern Gradle build system |
 | [Why Java Activity Shims](why-java-activity-shims.md) | Design rationale for thin Java activity classes instead of defactivity/gen-class |

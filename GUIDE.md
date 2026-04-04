@@ -535,6 +535,10 @@ Include pre-built JARs in a `libs/` directory and reference them as
 
 ### Release build configuration
 
+> Targeting `minSdk` 24 is supported on an experimental basis — see
+> [API 24 Release Builds](api-24-release.md) for the required
+> desugaring setup and a full config sample.
+
 ```kotlin
 // app/build.gradle.kts
 android {
